@@ -10,8 +10,8 @@ import scala.sys.process._
 
 
 class fileFunction (filepath : String) {
-  val ret : Stream[String] = s"hadoop fs -ls -R $filepath" #| "grep .n3"lines_!
-  val file_path: List[String] = ret
+  def ret : Stream[String] = s"hadoop fs -ls -R $filepath" #| "grep .n3"lines_!
+  def file_path: List[String] = ret
     .toList
     .withFilter(x => regexFunction.file_regex.matcher(x).find)
     .map(s => {
@@ -19,7 +19,14 @@ class fileFunction (filepath : String) {
       m.find()
       m.group()
     })
-
+  def status_path : List[(String, String)] = ret.toList
+    .withFilter(x => regexFunction.file_regex.matcher(x).find)
+    .map(s => {
+      val m = regexFunction.file_regex.matcher(s)
+      m.find()
+      (m.group(1) + m.group(2), m.group())
+    }
+    )
 }
 
 object fileFunction{
