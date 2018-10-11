@@ -30,11 +30,11 @@ libraryDependencies ++= Seq(
   "commons-io" % "commons-io" %  "2.5",
   "org.apache.spark" %% "spark-sql" % "1.6.3" % "provided",
   // https://mvnrepository.com/artifact/com.opencsv/opencsv
-  "com.opencsv" % "opencsv" % "4.3.1"
+  "com.opencsv" % "opencsv" % "4.3.1",
 
   // https://mvnrepository.com/artifact/org.apache.spark/spark-sql
   //"neo4j-contrib" % "neo4j-spark-connector" % "2.1.0-M4"
-  //  "org.apache.hadoop" % "hadoop-client" % "2.7.3",
+    "org.apache.hadoop" % "hadoop-client" % "2.7.3" % "provided"
 )
 
 
