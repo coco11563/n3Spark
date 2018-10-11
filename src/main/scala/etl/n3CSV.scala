@@ -3,16 +3,18 @@ package etl
 import java.io.StringWriter
 
 import Function.{fileFunction, regexFunction}
-import com.opencsv.CSVWriter
 import etl.Obj.Entity
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
+
 class n3CSV {
 
 }
 object n3CSV {
   def main(args: Array[String]): Unit = {
+
     val conf = new SparkConf()
       .setAppName("TestProcess")
       .set("spark.neo4j.bolt.url","bolt://neo4j:1234@10.0.88.50")
@@ -77,10 +79,11 @@ object n3CSV {
         .reduce(_ ++ _)
         .toSeq
       //test pass
-      val structSchema = for (s <- schema) yield {
-
-      }
+//      val structSchema = for (s <- schema) yield {
+//
+//      }
       import collection.JavaConversions._
+      import com.opencsv.CSVWriter
       val entity_collection_rdd = set_up_entity_rdd.map(l => {
         val en = l.filter(s => regexFunction.isEntity(s)).head
         val label = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"lprefix") + regexFunction.get(regexFunction.named_entity_regex.matcher(en),"label")
@@ -97,27 +100,19 @@ object n3CSV {
           .toMap
         new Entity(id, label, prop, schema)
       })
-
         .map(e => e.propSeq)
         .repartition(20)
         .mapPartitions(iter => {
-          val stringWriter = new StringWriter();
-          val csvWriter = new CSVWriter(stringWriter);
+          val stringWriter = new StringWriter()
+          val csvWriter = new CSVWriter(stringWriter)
           csvWriter.writeAll(iter.toList)
           Iterator(stringWriter.toString)
         })
 
+      val final_schema = "ENTITY_ID:ID," + schema.reduce((a, b) => a + "," + b) + ",:LABEL"
+      val entity_collection_array = Array(final_schema, entity_collection_rdd.first())
 
-      println(entity_collection_rdd.first())
-
-
+      println(entity_collection_array(0) + "\r\n" + entity_collection_array(1))
     }
   }
-
-  def processFileList(fileList : List[String], sc : SparkContext) : Unit = {
-
-  }
-
-
-
 }

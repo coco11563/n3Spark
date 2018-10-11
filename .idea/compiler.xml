@@ -2,6 +2,7 @@
 <project version="4">
   <component name="CompilerConfiguration">
     <bytecodeTargetLevel target="1.8">
+      <module name="n3CSV" target="1.8" />
       <module name="n3Spark" target="1.8" />
     </bytecodeTargetLevel>
   </component>
