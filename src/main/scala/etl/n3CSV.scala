@@ -1,12 +1,13 @@
 package etl
 
-import java.io.StringWriter
+import java.io.{File, PrintWriter, StringWriter}
 
 import Function.{fileFunction, regexFunction}
 import etl.Obj.Entity
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
+
 
 class n3CSV {
 
@@ -30,6 +31,7 @@ object n3CSV {
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     //main body
     for (l <- files_group_by_files) {
+      val partition_num = l._2.size / 10 + 1
       val temp_rdd_list = for (s <- l._2) yield {
         sc.textFile(s)
       }
@@ -77,7 +79,7 @@ object n3CSV {
         })
         .reduce(_ ++ _)
         .toSeq
-
+      import collection.JavaConversions._
       import com.opencsv.CSVWriter
       val entity_collection_rdd = set_up_entity_rdd.map(l => {
         val en = l.filter(s => regexFunction.isEntity(s)).head
@@ -95,19 +97,19 @@ object n3CSV {
         new Entity(id, label, prop, entity_schema)
       })
         .map(e => e.propSeq)
-//        .repartition(20)
-        .map(iter => {
+        .repartition(partition_num)
+        .mapPartitions(iter => {
           val stringWriter = new StringWriter()
           val csvWriter = new CSVWriter(stringWriter)
-          csvWriter.writeNext(iter)
-          stringWriter.toString
+          csvWriter.writeAll(iter.toList)
+          Iterator(stringWriter.toString)
         })
 
       val final_entity_schema = "ENTITY_ID:ID," + entity_schema.reduce((a, b) => a + "," + b) + ",ENTITY_TYPE:LABEL"
       val entity_collection_array = Array(final_entity_schema) ++ entity_collection_rdd.collect()
 //      val count_2 = entity_collection_rdd.count()
       //输出该实体的csv
-      sc.parallelize(entity_collection_array,1).saveAsTextFile(args(1) + "/entity/" + l._1)
+      saveAsTextLocal(args(1) + "/entity/" + l._1 + ".csv", entity_collection_array)
 
       val final_relationship_schema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE"
 
@@ -123,7 +125,15 @@ object n3CSV {
 
       val relationship_collection_array = Array(final_relationship_schema) ++ relationship_collection_rdd.collect()
       //输出实体对应的关系
-      sc.parallelize(relationship_collection_array,1).saveAsTextFile(args(1) + "/relationship/" + l._1 )
+      saveAsTextLocal(args(1) + "/relationship/" + l._1 + ".csv", relationship_collection_array)
     }
+  }
+
+
+  def saveAsTextLocal(path:String, stuff : Array[String]): Unit = {
+    val f = new File(path)
+    var writer = new PrintWriter(f)
+    for(s <- stuff) writer.println(s)
+    writer.close()
   }
 }
