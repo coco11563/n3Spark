@@ -18,6 +18,7 @@ object n3CSV {
     val conf = new SparkConf()
       .setAppName("TestProcess")
       .set("spark.neo4j.bolt.url","bolt://neo4j:1234@10.0.88.50")
+
     val sc = new SparkContext(conf)
     val main_files = new fileFunction(args(0))
 //    main_files.status_path.foreach(a => println(a._1 + " , " + a._2))
@@ -40,6 +41,7 @@ object n3CSV {
 //      l.foreach(s => println(s))
 //      original_rdd.repartition(30)
       //取得n3文件中的实体与属性
+      val count_1 = original_rdd.filter(s => regexFunction.entity_regex.matcher(s).find()).count()
       val entity_rdd = original_rdd
         .filter(s => regexFunction.entity_regex.matcher(s).find() ||
           regexFunction.property_regex.matcher(s).find())
@@ -67,9 +69,7 @@ object n3CSV {
         .map(s => {
           for (line <- s) yield {
             val m = regexFunction.named_property_regex.matcher(line)
-            regexFunction.get(regexFunction.named_property_regex.matcher(line)
-              , "pprefix") +
-              regexFunction.get(regexFunction.named_property_regex.matcher(line),
+            regexFunction.get(regexFunction.named_property_regex.matcher(line),
                 "name")
           }
         })
@@ -91,7 +91,6 @@ object n3CSV {
         val prop = l
           .filter(s => regexFunction.isProperty(s))
           .map(s => (
-            regexFunction.get(regexFunction.named_property_regex.matcher(s),"pprefix") +
               regexFunction.get(regexFunction.named_property_regex.matcher(s),"name")
             ->
               regexFunction.get(regexFunction.named_property_regex.matcher(s),"value")
@@ -101,18 +100,23 @@ object n3CSV {
         new Entity(id, label, prop, schema)
       })
         .map(e => e.propSeq)
-        .repartition(20)
-        .mapPartitions(iter => {
+//        .repartition(20)
+        .map(iter => {
           val stringWriter = new StringWriter()
           val csvWriter = new CSVWriter(stringWriter)
-          csvWriter.writeAll(iter.toList)
-          Iterator(stringWriter.toString)
+          csvWriter.writeNext(iter)
+          stringWriter.toString
         })
 
       val final_schema = "ENTITY_ID:ID," + schema.reduce((a, b) => a + "," + b) + ",:LABEL"
-      val entity_collection_array = Array(final_schema, entity_collection_rdd.first())
+//      val entity_collection_array = Array(final_schema, entity_collection_rdd.first())
+      val count_2 = entity_collection_rdd.count()
 
-      println(entity_collection_array(0) + "\r\n" + entity_collection_array(1))
+
+//      println(entity_collection_array(0) + "\r\n" + entity_collection_array(1))
+      println("from " + count_1 + " to " + count_2)
+      println("from " + count_1 + " to " + count_2)
+      println("from " + count_1 + " to " + count_2)
     }
   }
 }
