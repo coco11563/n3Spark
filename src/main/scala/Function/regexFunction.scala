@@ -15,8 +15,10 @@ object regexFunction {
   final val entity_regex: Pattern = Pattern.compile("(?:<)(http:\\/\\/[^>]+\\/)([^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:>) (?:<)(?:http:\\/\\/[^>]+\\/)([^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:#type)(?:>) (?:<)(http:\\/\\/[^>]+\\/)([^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:>) (?:\\.)")
   //#1 type #2 type(maybe) #2 number
   final val file_regex: Pattern = Pattern.compile("\\/data\\/alldataNew\\/(?<fp1>\\w+)\\/{0,1}(?<fp2>\\w*)\\/(?<name>\\w+).n3")
-
-
+  //fname
+  final val csv_entity_part_regex : Pattern = Pattern.compile("\\/data\\/out\\/entity\\/(?<fname>(?:\\w+)\\.csv)\\/part-[\\d]{5}")
+  //fname
+  final val csv_relationship_part_regex : Pattern = Pattern.compile("\\/data\\/out\\/relationship\\/(?<fname>(?:\\w+)\\.csv)\\/part-[\\d]{5}")
   //prefix id pprefix name value
   final val named_property_regex : Pattern = Pattern.compile("<(?<prefix>http:\\/\\/[^>]+\\/)(?<id>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> <(?<pprefix>http:\\/\\/[^>]+\\/)(?<name>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> \"(?<value>.+)\" \\.")
   //prefix id lprefix label
