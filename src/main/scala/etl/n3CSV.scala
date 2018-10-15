@@ -5,7 +5,6 @@ import java.io.{File, PrintWriter, StringWriter}
 import Function.{fileFunction, regexFunction}
 import etl.Obj.Entity
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
 
 
@@ -14,31 +13,48 @@ class n3CSV {
 }
 object n3CSV {
   def main(args: Array[String]): Unit = {
-
     val conf = new SparkConf()
       .setAppName("TestProcess")
       .set("spark.neo4j.bolt.url","bolt://neo4j:1234@10.0.88.50")
-      .set("spark.driver.maxResultSize", "8g")
+      .set("spark.driver.maxResultSize", "4g")
 
     val sc = new SparkContext(conf)
+
+
 //    sc.setCheckpointDir("/data/tmp")
     val main_files = new fileFunction(args(0))
 //    main_files.status_path.foreach(a => println(a._1 + " , " + a._2))
     val files_group_by_files = sc
       .parallelize(main_files.status_path)
       .groupByKey()
+      .collect()
       .map(s => (s._1, s._2.toList))
 //    files_group_by_files.foreach(l => println(l.reduce((a,b) => a + "," + b)))
-    val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+//    val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     //main body
+    println("==============================================")
+//    for(l <- files_group_by_files) println(l._2.reduce(_ + _))
+    println("==============================================")
+
     for (l <- files_group_by_files) {
+      var index = 0
       val partition_num = l._2.size / 10 + 1
-      val temp_rdd_list = for (s <- l._2) yield {
-        sc.textFile(s)
+      var temp_rdd_list : RDD[String] = sc.emptyRDD[String]
+      val iterator : Iterator[String] = l._2.iterator
+      while(iterator.hasNext) {
+        index match {
+          case 0 => temp_rdd_list = sc.textFile(iterator.next())
+            index += 1
+          case 1000 =>
+            println(temp_rdd_list.count()) //in some case the num of file will excess 10w, use this way to reduce the depth of DAG
+            index = 1
+          case _ => temp_rdd_list = temp_rdd_list.union(sc.textFile(iterator.next))
+            index += 1
+        }
       }
+
       //一个目录下的n3文件
-      val original_rdd: RDD[String] =
-        temp_rdd_list.reduce(_ union _)
+
 
 //      original_rdd.checkpoint()
 //        .persist(StorageLevel.MEMORY_AND_DISK)
@@ -46,13 +62,13 @@ object n3CSV {
 //      original_rdd.repartition(30)
       //取得n3文件中的实体与属性
 //      val count_1 = original_rdd.filter(s => regexFunction.entity_regex.matcher(s).find()).count()
-      val entity_rdd = original_rdd
+      val entity_rdd = temp_rdd_list
         .filter(s => regexFunction.entity_regex.matcher(s).find() ||
           regexFunction.property_regex.matcher(s).find())
 //        .repartition(partition_num)
 
       //取得n3文件中的关系文件
-      val relationship_rdd = original_rdd
+      val relationship_rdd = temp_rdd_list
         .filter(s => regexFunction.rela_regex.matcher(s).find())
 //        .repartition(partition_num)
 
@@ -95,8 +111,9 @@ object n3CSV {
         .toSeq
 //      sc.broadcast(entity_schema)
 
-      import collection.JavaConversions._
       import com.opencsv.CSVWriter
+
+      import collection.JavaConversions._
       val entity_collection_rdd = set_up_entity_rdd.map(l => {
         val en = l.filter(s => regexFunction.isEntity(s)).head
         val label = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"lprefix") + regexFunction.get(regexFunction.named_entity_regex.matcher(en),"label")
@@ -113,7 +130,7 @@ object n3CSV {
         new Entity(id, label, prop, entity_schema)
       })
         .map(e => e.propSeq)
-        .repartition(partition_num * 20)
+//        .repartition(partition_num * 20)
         .mapPartitions(iter => {
           val stringWriter = new StringWriter()
           val csvWriter = new CSVWriter(stringWriter)
@@ -122,12 +139,13 @@ object n3CSV {
         })
 
       val final_entity_schema = "ENTITY_ID:ID," + entity_schema.reduce((a, b) => a + "," + b) + ",ENTITY_TYPE:LABEL"
-      val entity_collection_array = sc.parallelize(Array(final_entity_schema)) ++ entity_collection_rdd
+      val entity_collection_array = sc.parallelize(Array(final_entity_schema)) //only way to make rdd
+      val entity_collection_array_rdd = entity_collection_array ++ entity_collection_rdd
 //      val count_2 = entity_collection_rdd.count()
       //输出该实体的csv
 //      saveAsTextLocal(args(1) + "/entity/" + l._1 + ".csv", entity_collection_array)
-      entity_collection_array
-        .repartition(1)
+      entity_collection_array_rdd
+//        .coalesce(1)
         .saveAsTextFile(args(1) + "/entity/" + l._1 + ".csv")
 
       val final_relationship_schema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE"
@@ -142,9 +160,10 @@ object n3CSV {
           regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"type")
       })
 
-      val relationship_collection_array = sc.parallelize(Array(final_relationship_schema)) ++ relationship_collection_rdd
-      relationship_collection_array
-          .repartition(1)
+      val relationship_collection_array = sc.parallelize(Array(final_relationship_schema)) //only way to make rdd
+      val relationship_collection_array_rdd = relationship_collection_array ++ relationship_collection_rdd
+      relationship_collection_array_rdd
+//          .coalesce(1)
           .saveAsTextFile(args(1) + "/relationship/" + l._1 + ".csv")
       //输出实体对应的关系
 //      saveAsTextLocal(args(1) + "/relationship/" + l._1 + ".csv", relationship_collection_array)

@@ -14,7 +14,7 @@ object regexFunction {
   //#1 http type #2 id #3 label
   final val entity_regex: Pattern = Pattern.compile("(?:<)(http:\\/\\/[^>]+\\/)([^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:>) (?:<)(?:http:\\/\\/[^>]+\\/)([^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:#type)(?:>) (?:<)(http:\\/\\/[^>]+\\/)([^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:>) (?:\\.)")
   //#1 type #2 type(maybe) #2 number
-  final val file_regex: Pattern = Pattern.compile("\\/data\\/alldataNew\\/(?<fp1>\\w+)\\/{0,1}(?<fp2>\\w*)\\/(?<name>\\w+).n3")
+  final val file_regex: Pattern = Pattern.compile("\\/data\\/alldataNew\\/(?<fp1>\\w+)\\/{0,1}(?<fp2>\\w*)\\/(?<name>[\\w.]+).n3")
   //fname
   final val csv_entity_part_regex : Pattern = Pattern.compile("\\/data\\/out\\/entity\\/(?<fname>(?:\\w+)\\.csv)\\/part-[\\d]{5}")
   //fname
