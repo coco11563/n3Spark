@@ -22,7 +22,7 @@ object regexFunction {
   //prefix id pprefix name value
   final val named_property_regex : Pattern = Pattern.compile("<(?<prefix>http:\\/\\/[^>]+\\/)(?<id>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> <(?<pprefix>http:\\/\\/[^>]+\\/)(?<name>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> \"(?<value>.+)\" \\.")
   //prefix id lprefix label
-  final val named_entity_regex : Pattern = Pattern.compile("<(?<prefix>http:\\/\\/[^>]+\\/)(?<id>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> <(?:http:\\/\\/[^>]+\\/)(?:[^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:#type)> <(?<lprefix>http:\\/\\/[^>]+\\/)(?<label>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> \\.")
+  final val named_entity_regex : Pattern = Pattern.compile("(<(?<prefix>http:\\/\\/[^>]+\\/)(?<id>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)>|(?<nonprefixid>[:_\\w]+)) <(?:http:\\/\\/[^>]+\\/)(?:[^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?:#type)> <(?<lprefix>http:\\/\\/[^>]+\\/)(?<label>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> \\.")
   //prefix1 id1 tprefix type prefix2 id2
   final val named_relationship_regex : Pattern = Pattern.compile("<(?<prefix1>http:\\/\\/[^>]+\\/)(?<id1>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> <(?<tprefix>http:\\/\\/[^>]+\\/)(?<type>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)(?<!#type)> <(?<prefix2>http:\\/\\/[^>]+\\/)(?<id2>[^\\/][-A-Za-z0-9._#$%^&*!@~]+)> \\.")
 
@@ -48,8 +48,29 @@ object regexFunction {
   }
 
   def main(args: Array[String]): Unit = {
-    val m = regexFunction.named_property_regex.matcher("<http://gcm.wdcm.org/data/gcmAnnotation1/enzyme/1.5.1.17> <http://gcm.wdcm.org/ontology/gcmAnnotation/v1/otherName> \"ALPDH\" .")
-    println(get(m, "pprefix"))
-    println(get(m, "name"))
+    val m = regexFunction.named_entity_regex.matcher("_:BX2D6caf4877X3A1588628adf8X3AX2D4827 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Axiom> .")
+    var id = if (m.find()) {
+      if (m.group("prefix") == null) {
+        m.group("nonprefixid")
+      } else {
+        m.group("prefix") + m.group("id")
+      }
+    }
+    println(getEntityId("_:BX2D6caf4877X3A1588628adf8X3AX2D4827 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Axiom> ."))
+    println(getEntityId("<http://www.w3.org/2002/07/owl#annotatedSource> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Axiom> ."))
+  }
+
+  def getEntityId(str : String) : String = {
+    val m = regexFunction.named_entity_regex.matcher(str)
+    var id = if (m.find()) {
+      if (m.group("prefix") == null) {
+        m.group("nonprefixid")
+      } else {
+        m.group("prefix") + m.group("id")
+      }
+    } else {
+      ""
+    }
+    id
   }
 }

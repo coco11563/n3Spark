@@ -15,7 +15,7 @@ lazy val root = (project in file(".")).
     name := "n3Spark",
     scalaVersion := "2.10.5",
     scalaVersion in ThisBuild := "2.10.5",
-    mainClass in Compile := Some("etl.n3CSV")
+    mainClass in Compile := Some("etl.n3CSVRefactor")
   ).enablePlugins()
 
 assemblyMergeStrategy in assembly := {
