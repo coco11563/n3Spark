@@ -38,10 +38,10 @@ object n3CSVRefactor {
       val me = regexFunction.named_entity_regex.matcher(s)
       val mp = regexFunction.named_property_regex.matcher(s)
       if (me.find()) {
-        (me.group("prefix") + me.group("id"), me.group())
+        (me.group("id"), me.group())
       } else {
         mp.find()
-        (mp.group("prefix") + mp.group("id"), mp.group())
+        (mp.group("id"), mp.group())
       }
     }) //RDD(id, str)
       .groupByKey() //main, gather all the same id entity
@@ -54,8 +54,11 @@ object n3CSVRefactor {
       .map(s => {
         s.map(line => {
           val m = regexFunction.named_property_regex.matcher(line)
-          regexFunction.get(regexFunction.named_property_regex.matcher(line),
-            "name")
+          m.find()
+          val flag = m.group("flag")
+          val value = m.group("value")
+          val name = m.group("name")
+          if (value == flag) flag else name
         })
       }) // RDD[List[KeyStr]]
       .map(l => {
@@ -69,17 +72,21 @@ object n3CSVRefactor {
     val entityClassRdd = settleUpEntityRdd.map(l => { //RDD[List[String]]
       val en = l.filter(s => regexFunction.isEntity(s)).head //Entity Str
       val label = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"label") //label
-      //prefix + id
-      val id = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"prefix")+
-        regexFunction.get(regexFunction.named_entity_regex.matcher(en),"id")
+      //id
+      val id = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"id")
       val prop = l
         .filter(s => regexFunction.isProperty(s))//List[PropStr]
-        .map(s => ( //may cause the duplicated key/value overwrite
-          regexFunction.get(regexFunction.named_property_regex.matcher(s),"name")
-            ->
-            regexFunction.get(regexFunction.named_property_regex.matcher(s),"value").replace("\"", "\"\"")
-          )
-        )//(key, value)
+        .map(s => //may cause the duplicated key/value overwrite
+      {
+        val m = regexFunction.named_property_regex.matcher(s)
+        m.find()
+        val flag = m.group("flag")
+        val flagName = m.group("flagname")
+        val value = m.group("value")
+        val name = m.group("name")
+        if (value == flag) flag -> flagName else name -> value
+      }
+      )//(key, value)
         .groupBy(i => i._1)
         .map(f => (f._1, f._2.map(_._2).toArray))
         .toArray
@@ -87,7 +94,7 @@ object n3CSVRefactor {
       new Entity(id, label, prop, entitySchema)
     })
 
-//    println(entityClassRdd.first().propSeq.length) // 2
+    //    println(entityClassRdd.first().propSeq.length) // 2
 
     val cacuArrayEntity = entityClassRdd
       .map(e => e.propSeq.map(_.contains(";")).toSeq)
