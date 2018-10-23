@@ -147,11 +147,8 @@ object n3CSVRefactor {
     val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE"
 
     val relationshipCollectionRdd = relationshipRdd.map(s => {
-      regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"prefix1") +
         regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"id1") + "," +
-        regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"tprefix") +
         regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"type") + "," +
-        regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"prefix2") +
         regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"id2") + "," +
         regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"type")
     })
