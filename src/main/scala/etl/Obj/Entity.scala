@@ -1,46 +1,53 @@
 package etl.Obj
 
+import java.io.StringWriter
+
+import com.opencsv.CSVWriter
+
 import scala.collection.mutable.ListBuffer
 
-class Entity( id : String, label : String, prop : Map[String, Any], schema : Seq[String]) extends Serializable
+class Entity( id : String, label : String, prop : Map[String, Array[String]], schema : Seq[String]) extends Serializable
 {
   def propSeq : Array[String] = {
     var ret : ListBuffer[String] = new ListBuffer[String]()
     ret +:= id
-    for (name <- schema) {
-    val value = {
-      if (prop.contains(name))
-        prop(name)
-      else
-        ""
+    val l =  for (name <- schema) yield {
+      val value : Array[String] = {
+        if (prop.contains(name))
+          prop(name)
+        else
+          Array("")
+      }
+      value
+        .map(f => if (f == "") "\"\"" else f)
+        .map(_.replaceAll(";", " "))
+        .reduce((a,b) => a + ";" + b)
     }
-    value match {
-      case _: String =>
-        ret += value.asInstanceOf[String]
-      case _: Array[String] =>
-        var temp = value.asInstanceOf[Array[String]]
-        val templist: ListBuffer[String] = ListBuffer()
-        for (t <- temp) {
-          templist.+=(t)
-        }
-        ret += templist.reduce((a,b) => a + ";" + b)
-      case _ => ret += ""
-    }
-  }
+    ret ++= l
     ret += label
-    ret.toArray
+    ret.map(s => {
+      if (s.contains(","))
+        "\"" + s + "\""
+      else
+        s
+    }).toArray
   }
 
   override def toString: String = {
-    this.propSeq.map(a =>"\"" + a + "\"").reduce((a,b) => a + "," + b)
+    this.propSeq.reduce((a,b) => a + "," + b)
   }
 
 
 }
 object Entity{
   def main(args: Array[String]): Unit = {
-    val m : Map[String, Any] = Map("sc1" -> "test1", "sc2" -> Array("2","1"))
-    val e = new Entity("label1", "id2", m, Array("sc1","sc2"))
+    val m : Map[String, Array[String]] = Map("sc1" ->Array("test1"), "sc2" -> Array(",2","1"))
+    val e = new Entity("la,bel1", "i,d2", m, Array("sc1","sc2"))
+    val stringWriter = new StringWriter()
+    val csvWriter = new CSVWriter(stringWriter)
+    import collection.JavaConversions._
+    csvWriter.writeAll(List(e.propSeq))
+    println(stringWriter.toString)
     println(e.toString)
   }
 }

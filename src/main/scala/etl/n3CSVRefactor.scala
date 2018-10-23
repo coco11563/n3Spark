@@ -1,8 +1,6 @@
 package etl
 
-import java.io.StringWriter
-
-import Function.{fileFunction, regexFunction}
+import Function.regexFunction
 import etl.Obj.Entity
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -45,58 +43,94 @@ object n3CSVRefactor {
         mp.find()
         (mp.group("prefix") + mp.group("id"), mp.group())
       }
-    })
-      .groupByKey() //main
-      .values
+    }) //RDD(id, str)
+      .groupByKey() //main, gather all the same id entity
+      .values //get the same id str
       .map(s => s.toList)
 
 
-    val entitySchema:Seq[String] = settleUpEntityRdd
-      .map(s => s.filter(l => regexFunction.isProperty(l)))
+    val entitySchema:Seq[String] = settleUpEntityRdd //RDD[List[String]]
+      .map(s => s.filter(l => regexFunction.isProperty(l))) //RDD[List[PropStr]]
       .map(s => {
         s.map(line => {
           val m = regexFunction.named_property_regex.matcher(line)
           regexFunction.get(regexFunction.named_property_regex.matcher(line),
             "name")
         })
-      })
+      }) // RDD[List[KeyStr]]
       .map(l => {
-        l.toSet
+        l.toSet //RDD[Set[KeyStr]]
       })
-      .reduce(_ ++ _)
+      .reduce(_ ++ _) //Set[Key]
       .toSeq
 
-    entitySchema.foreach(s => println(s))
+//    entitySchema.foreach(s => println(s))
 
-    import com.opencsv.CSVWriter
-
-    import collection.JavaConversions._
-
-    val entityCollectionRdd = settleUpEntityRdd.map(l => {
-      val en = l.filter(s => regexFunction.isEntity(s)).head
-      val label = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"lprefix") + regexFunction.get(regexFunction.named_entity_regex.matcher(en),"label")
-      val id = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"prefix") + regexFunction.get(regexFunction.named_entity_regex.matcher(en),"id")
+    val entityClassRdd = settleUpEntityRdd.map(l => { //RDD[List[String]]
+      val en = l.filter(s => regexFunction.isEntity(s)).head //Entity Str
+      val label = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"label") //label
+      //prefix + id
+      val id = regexFunction.get(regexFunction.named_entity_regex.matcher(en),"prefix")+
+        regexFunction.get(regexFunction.named_entity_regex.matcher(en),"id")
       val prop = l
-        .filter(s => regexFunction.isProperty(s))
-        .map(s => (
+        .filter(s => regexFunction.isProperty(s))//List[PropStr]
+        .map(s => ( //may cause the duplicated key/value overwrite
           regexFunction.get(regexFunction.named_property_regex.matcher(s),"name")
             ->
-            regexFunction.get(regexFunction.named_property_regex.matcher(s),"value").replace("\"", "'")
+            regexFunction.get(regexFunction.named_property_regex.matcher(s),"value").replace("\"", "\"\"")
           )
-        ).toArray
+        )//(key, value)
+        .groupBy(i => i._1)
+        .map(f => (f._1, f._2.map(_._2).toArray))
+        .toArray
         .toMap
       new Entity(id, label, prop, entitySchema)
     })
-      .map(e => e.propSeq)
-      .mapPartitions(iter => {
-      val stringWriter = new StringWriter()
-      val csvWriter = new CSVWriter(stringWriter)
-      csvWriter.writeAll(iter.toList)
-      Iterator(stringWriter.toString)
+
+//    println(entityClassRdd.first().propSeq.length) // 2
+
+    val cacuArrayEntity = entityClassRdd
+      .map(e => e.propSeq.map(_.contains(";")).toSeq)
+      .reduce(
+        (a,b) => {
+        for (i <- a.indices) yield {
+          a(i) || b(i)
+        }
     })
 
-    val final_entity_schema = "ENTITY_ID:ID," +
-      entitySchema.reduce((a, b) => a + "," + b) + ",ENTITY_TYPE:LABEL"
+    val entityCollectionRdd = entityClassRdd.map(_.toString)
+    var entitySchemaDemo : Array[String] = Array("ENTITY_ID:ID")
+    entitySchemaDemo ++= entitySchema
+    entitySchemaDemo :+= "ENTITY_TYPE:LABEL"
+
+//    println(cacuArrayEntity.length)
+//    println(entitySchemaDemo.length)
+
+    entitySchemaDemo.foreach(println(_))
+
+    //IndexOutBound
+    val finalEntitySchemaDemo =
+      for (i <- entitySchemaDemo.indices) yield {
+        if (cacuArrayEntity(i))
+          entitySchemaDemo(i) + ":String[]"
+        else
+          entitySchemaDemo(i)
+    }
+
+    var final_entity_schema = finalEntitySchemaDemo.reduce((a, b) => a + "," + b)
+
+//    println("==========================================")
+//    println("==========================================")
+//    println("==========================================")
+//    println("==========================================")
+//    println("==========================================")
+//    println("==========================================")
+//    println(final_entity_schema)
+//    println("==========================================")
+//    println("==========================================")
+//    println("==========================================")
+//    println("==========================================")
+//    println("==========================================")
 
     val entitySchemaRdd = sc.parallelize(Array(final_entity_schema)) //only way to make rdd
     val entityCollectionRddWithHead = entitySchemaRdd ++ entityCollectionRdd
