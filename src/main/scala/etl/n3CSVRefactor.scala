@@ -3,7 +3,7 @@ package etl
 import Function.regexFunction
 import etl.Obj.Entity
 import org.apache.spark.{SparkConf, SparkContext}
-
+import scala.sys.process._
 class n3CSVRefactor {
 
 }
@@ -14,9 +14,24 @@ object n3CSVRefactor {
   //输入的参数 args(2) -> 输出的文件名（.csv）
   //一次处理单个N3文件
   def main(args: Array[String]): Unit = {
+
+
     val mainFile = args(0)
     val outFile = args(1)
     val outName = args(2)
+    val deletePastRelationship = s"hadoop fs -rm -r $outFile$outName" +
+      "_relationship"!
+
+    if (deletePastRelationship == 0) println("done delete past relationship with code " + deletePastRelationship)
+    else println("wrong with delete past relationship with error code " + deletePastRelationship)
+
+    val deletePastEntity = s"hadoop fs -rm -r $outFile$outName" +
+      "_entity"!
+
+    if (deletePastRelationship == 0) println("done delete past entity with code " + deletePastEntity)
+    else println("wrong with delete past entity with error code " + deletePastEntity)
+
+
     val conf = new SparkConf()
       .setAppName("ProcessOn" + outName)
       .set("spark.neo4j.bolt.url","bolt://neo4j:1234@10.0.88.50")
@@ -141,7 +156,7 @@ object n3CSVRefactor {
     val entitySchemaRdd = sc.parallelize(Array(final_entity_schema)) //only way to make rdd
     val entityCollectionRddWithHead = entitySchemaRdd ++ entityCollectionRdd // gear up the csv with it's head
 
-    entityCollectionRddWithHead.saveAsTextFile(outFile  + outName +"_entity" + ".csv") // store the csv file
+    entityCollectionRddWithHead.saveAsTextFile(outFile  + outName +"_entity") // store the csv file
 
     val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE" // make the relationship schema
 
@@ -155,6 +170,33 @@ object n3CSVRefactor {
     val relationshipCollectionArray = sc.parallelize(Array(finalRelationshipSchema)) //only way to make rdd
     val relationshipCollectionArrayRdd = relationshipCollectionArray ++ relationshipCollectionRdd // build the relationship csv with head
     relationshipCollectionArrayRdd
-      .saveAsTextFile(outFile + outName +"_relationship"+ ".csv") // store the relationship rdd file
+      .saveAsTextFile(outFile + outName + "_relationship") // store the relationship rdd file
+
+
+
+    val deletePastMergedRelationship = s"hadoop fs -rm -r $outFile$outName" +
+      s"_relationship.csv"!
+
+    if (deletePastMergedRelationship == 0) println("relationship merge delete done with " + deletePastMergedRelationship)
+    else println("wrong with relationship merge delete with error code " + deletePastMergedRelationship)
+
+    val deletePastMergedEntity = s"hadoop fs -rm -r $outFile$outName" +
+      s"_relationship.csv"!
+
+    if (deletePastMergedEntity == 0) println("entity merge delete done with " + deletePastMergedEntity)
+    else println("wrong with entity merge delete with error code " + deletePastMergedEntity)
+
+
+    val mergeEntity = s"hadoop fs -cat $outFile$outName" +
+      "_entity/*" #| s"hadoop fs -put - $outFile$outName" + "_entity.csv"!
+
+    if (mergeEntity == 0) println("entity merge done with " + mergeEntity)
+    else println("wrong with entity merge with error code " + mergeEntity)
+
+    val mergeRelationship = s"hadoop fs -cat $outFile$outName" +
+      "_relationship/*" #| s"hadoop fs -put - $outFile$outName" + "_relationship.csv"!
+
+    if (mergeRelationship == 0) println("relationship merge done with " + mergeRelationship)
+    else println("wrong with relationship merge with error code " + mergeRelationship)
   }
 }
