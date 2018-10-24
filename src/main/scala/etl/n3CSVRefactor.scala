@@ -9,11 +9,10 @@ class n3CSVRefactor {
 }
 object n3CSVRefactor {
   //重构原因 ： 部分N3文件数量过大，导致无法正常处理（StackOverflow）
-  //这个版本会遍历一个文件夹，文件夹内存在若干巨大的n3文件
-  //处理这个文件的逻辑与之前类似
   //输入的参数 args(0) -> 处理的文件地址
   //输入的参数 args(1) -> 输出的文件地址
   //输入的参数 args(2) -> 输出的文件名（.csv）
+  //一次处理单个N3文件
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf()
       .setAppName("TestProcess")
@@ -27,12 +26,12 @@ object n3CSVRefactor {
     val originalRdd = sc.textFile(mainFile)
     println(originalRdd.first())
     val entityRdd = originalRdd
-      .filter(s => regexFunction.entity_regex.matcher(s).find() ||
-        regexFunction.property_regex.matcher(s).find())
+      .filter(s => regexFunction.named_entity_regex.matcher(s).find() ||
+        regexFunction.named_property_regex.matcher(s).find())
     println(entityRdd.first())
     //取得n3文件中的关系文件
     val relationshipRdd = originalRdd
-      .filter(s => regexFunction.rela_regex.matcher(s).find())
+      .filter(s => regexFunction.named_property_regex.matcher(s).find())
 
     val settleUpEntityRdd = entityRdd.map(s => {
       val me = regexFunction.named_entity_regex.matcher(s)
@@ -87,21 +86,21 @@ object n3CSVRefactor {
         if (value == flag) flag -> flagName else name -> value
       }
       )//(key, value)
-        .groupBy(i => i._1)
+        .groupBy(i => i._1) //mk the same value to same group then the duplicated one could store in an ARRAY
         .map(f => (f._1, f._2.map(_._2).toArray))
         .toArray
         .toMap
-      new Entity(id, label, prop, entitySchema)
+      new Entity(id, label, prop, entitySchema) // get the new entity
     })
 
     //    println(entityClassRdd.first().propSeq.length) // 2
 
     val cacuArrayEntity = entityClassRdd
-      .map(e => e.propSeq.map(_.contains(";")).toSeq)
-      .reduce(
+      .map(e => e.propSeq.map(_.contains(";")).toSeq) //the ';' will only show when the Str is Array
+      .reduce( // if this one is duplicated key one then the return will be true
         (a,b) => {
         for (i <- a.indices) yield {
-          a(i) || b(i)
+          a(i) || b(i) //use this step to get an list which contain the flag about "is this key duplicated"
         }
     })
 
@@ -119,12 +118,12 @@ object n3CSVRefactor {
     val finalEntitySchemaDemo =
       for (i <- entitySchemaDemo.indices) yield {
         if (cacuArrayEntity(i))
-          entitySchemaDemo(i) + ":String[]"
+          entitySchemaDemo(i) + ":String[]"  // this one will use the TRUE/FALSE list to generate the right schema with SchemaType
         else
-          entitySchemaDemo(i)
+          entitySchemaDemo(i) // in this case the element is not duplicated one, so the schema will not followed by ":String[]"
     }
 
-    var final_entity_schema = finalEntitySchemaDemo.reduce((a, b) => a + "," + b)
+    var final_entity_schema = finalEntitySchemaDemo.reduce((a, b) => a + "," + b) // get the final schema, finish the entity schema generate
 
 //    println("==========================================")
 //    println("==========================================")
@@ -140,13 +139,13 @@ object n3CSVRefactor {
 //    println("==========================================")
 
     val entitySchemaRdd = sc.parallelize(Array(final_entity_schema)) //only way to make rdd
-    val entityCollectionRddWithHead = entitySchemaRdd ++ entityCollectionRdd
+    val entityCollectionRddWithHead = entitySchemaRdd ++ entityCollectionRdd // gear up the csv with it's head
 
-    entityCollectionRddWithHead.saveAsTextFile(outFile + "/entity/" + outName + ".csv")
+    entityCollectionRddWithHead.saveAsTextFile(outFile  + outName +"_entity" + ".csv") // store the csv file
 
-    val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE"
+    val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE" // make the relationship schema
 
-    val relationshipCollectionRdd = relationshipRdd.map(s => {
+    val relationshipCollectionRdd = relationshipRdd.map(s => { // generate the relationship rdd
         regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"id1") + "," +
         regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"type") + "," +
         regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"id2") + "," +
@@ -154,8 +153,8 @@ object n3CSVRefactor {
     })
 
     val relationshipCollectionArray = sc.parallelize(Array(finalRelationshipSchema)) //only way to make rdd
-    val relationshipCollectionArrayRdd = relationshipCollectionArray ++ relationshipCollectionRdd
+    val relationshipCollectionArrayRdd = relationshipCollectionArray ++ relationshipCollectionRdd // build the relationship csv with head
     relationshipCollectionArrayRdd
-      .saveAsTextFile(outFile + "/relationship/" + outName + ".csv")
+      .saveAsTextFile(outFile + outName +"_relationship"+ ".csv") // store the relationship rdd file
   }
 }
