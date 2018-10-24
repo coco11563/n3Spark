@@ -14,15 +14,15 @@ object n3CSVRefactor {
   //输入的参数 args(2) -> 输出的文件名（.csv）
   //一次处理单个N3文件
   def main(args: Array[String]): Unit = {
+    val mainFile = args(0)
+    val outFile = args(1)
+    val outName = args(2)
     val conf = new SparkConf()
-      .setAppName("TestProcess")
+      .setAppName("ProcessOn" + outName)
       .set("spark.neo4j.bolt.url","bolt://neo4j:1234@10.0.88.50")
       .set("spark.driver.maxResultSize", "4g")
 
     val sc = new SparkContext(conf)
-    val mainFile = args(0)
-    val outFile = args(1)
-    val outName = args(2)
     val originalRdd = sc.textFile(mainFile)
     println(originalRdd.first())
     val entityRdd = originalRdd
