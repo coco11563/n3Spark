@@ -3,7 +3,12 @@ package etl
 import Function.regexFunction
 import etl.Obj.Entity
 import org.apache.spark.{SparkConf, SparkContext}
+
 import scala.sys.process._
+import breeze.linalg._
+
+import scala.language.postfixOps
+
 class n3CSVRefactor {
 
 }
@@ -111,13 +116,10 @@ object n3CSVRefactor {
     //    println(entityClassRdd.first().propSeq.length) // 2
 
     val cacuArrayEntity = entityClassRdd
-      .map(e => e.propSeq.map(_.contains(";")).toSeq) //the ';' will only show when the Str is Array
+      .map(e => DenseVector(e.propSeq.map(_.contains(";")))) //the ';' will only show when the Str is Array
       .reduce( // if this one is duplicated key one then the return will be true
-        (a,b) => {
-        for (i <- a.indices) yield {
-          a(i) || b(i) //use this step to get an list which contain the flag about "is this key duplicated"
-        }
-    })
+        _ :| _ //using breeze lib to replace the yield operation
+    )
 
     val entityCollectionRdd = entityClassRdd.map(_.toString)
     var entitySchemaDemo : Array[String] = Array("ENTITY_ID:ID")
@@ -187,14 +189,12 @@ object n3CSVRefactor {
     else println("wrong with entity merge delete with error code " + deletePastMergedEntity)
 
 
-    val mergeEntity = s"hadoop fs -cat $outFile$outName" +
-      "_entity/*" #| s"hadoop fs -put - $outFile$outName" + "_entity.csv"!
+    val mergeEntity = s"hadoop fs -cat ${outFile + outName}_entity/*" #| s"hadoop fs -put - ${outFile + outName}_entity.csv"!
 
     if (mergeEntity == 0) println("entity merge done with " + mergeEntity)
     else println("wrong with entity merge with error code " + mergeEntity)
 
-    val mergeRelationship = s"hadoop fs -cat $outFile$outName" +
-      "_relationship/*" #| s"hadoop fs -put - $outFile$outName" + "_relationship.csv"!
+    val mergeRelationship = s"hadoop fs -cat ${outFile + outName}_relationship/*" #| s"hadoop fs -put - ${outFile + outName}_relationship.csv"!
 
     if (mergeRelationship == 0) println("relationship merge done with " + mergeRelationship)
     else println("wrong with relationship merge with error code " + mergeRelationship)

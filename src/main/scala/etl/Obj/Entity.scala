@@ -2,8 +2,6 @@ package etl.Obj
 
 import java.io.StringWriter
 
-import com.opencsv.CSVWriter
-
 import scala.collection.mutable.ListBuffer
 
 class Entity( id : String, label : String, prop : Map[String, Array[String]], schema : Seq[String]) extends Serializable
@@ -44,10 +42,5 @@ object Entity{
     val m : Map[String, Array[String]] = Map("sc1" ->Array("test1"), "sc2" -> Array(",2","1"))
     val e = new Entity("la,bel1", "i,d2", m, Array("sc1","sc2"))
     val stringWriter = new StringWriter()
-    val csvWriter = new CSVWriter(stringWriter)
-    import collection.JavaConversions._
-    csvWriter.writeAll(List(e.propSeq))
-    println(stringWriter.toString)
-    println(e.toString)
   }
 }
