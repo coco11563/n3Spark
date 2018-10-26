@@ -166,5 +166,4 @@ object HDFSHelper {
       copyFileToLocal(hdfs, child, targetFileFullName)
     }
   }
-
 }
