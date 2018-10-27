@@ -3,7 +3,7 @@ package etl
 import Function.{HDFSHelper, regexFunction}
 import etl.Obj.Entity
 import org.apache.hadoop.fs.FileSystem
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable.ListBuffer
@@ -18,23 +18,40 @@ object n3CSVBigFileRefactor {
   def main(args: Array[String]): Unit = {
     val mainFilepath = args(0)
     val outName = args(1)
+    val countPer = Integer.parseInt(args(2))
     val outFile = "/data/out/temp/"
     val tempMergePath = "/data/out/merge/"
     val mergePath = "/data/out/csv/mergeCSV/"
 
-
-    val pathList = HDFSHelper.listChildren(HDFSFileSystem, mainFilepath, new ListBuffer[String])
-
-    pathList.foreach(println(_))
     val sparkConf = new SparkConf()
       .setAppName("ProcessOn" + outName)
       .set("spark.driver.maxResultSize", "4g")
 
+
+    val pathList : List[String] = HDFSHelper
+      .listChildren(HDFSFileSystem, mainFilepath, new ListBuffer[String])
+      .toList
+
+//    pathList.foreach(println(_))
+
     val sc = new SparkContext(sparkConf)
     var v = new ListBuffer[(Seq[String], Seq[String])]
-    for (i <- pathList.indices)
-      v += process(pathList(i), outFile, outName, sc, i, tempMergePath)
+    var list : ListBuffer[String] = new ListBuffer[String]
+    println(pathList.head)
+    println("=================================================")
+    for (i <- pathList.indices) {
+      println(s"===================$i==============================")
+      println(s"=================$countPer=========================")
+      if (i % countPer == 0 && i != 0) {
+        list += pathList(i)
+        v += process(list.toList, outFile, outName, sc, i, tempMergePath)
+        list = new ListBuffer[String]
+      } else if (i == pathList.size - 1) {
+        list += pathList(i)
+        v += process(list.toList, outFile, outName, sc, i, tempMergePath)
+      }else {list += pathList(i)}
 
+    }
     val head_entity = v.toList.head._1
     val head_relationship = v.toList.head._2
     sc.parallelize(head_relationship).saveAsTextFile(tempMergePath + "/relationship/head")
@@ -96,7 +113,7 @@ object n3CSVBigFileRefactor {
     *
     * after the process about spark
     * scala will use linux console to merge the file to the outMergePath
-    * @param mainFile the file path you need to precess
+    * @param mainFiles the file path you need to precess
     * @param outFile output file directory
     * @param outName output file path
     * @param sc spark main context
@@ -104,13 +121,14 @@ object n3CSVBigFileRefactor {
     * @param outMergePath the output merge path
     * @return the schema of the data (entity & relationship)
     */
-  def process(mainFile : String, outFile : String, outName : String , sc : SparkContext, index : Int, outMergePath : String) : (Seq[String], Seq[String]) = {
+  def process(mainFiles : List[String], outFile : String, outName : String , sc : SparkContext, index : Int, outMergePath : String) : (Seq[String], Seq[String]) = {
     val deletePastTemp = removeFileByShell(outFile)
-
     if (deletePastTemp == 0) println("done delete past tmp file with code " + deletePastTemp)
     else println("wrong with delete past tmp file with error code " + deletePastTemp)
-
-    val originalRdd = sc.textFile(mainFile)
+    var originalRdd : RDD[String] = sc.emptyRDD[String]
+    for (s <- mainFiles) {
+      originalRdd = originalRdd.union(sc.textFile(s))
+    }
     println(originalRdd.first())
     val entityRdd = originalRdd
       .filter(s => regexFunction.named_entity_regex.matcher(s).find() ||
