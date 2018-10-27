@@ -14,9 +14,9 @@ lazy val root = (project in file(".")).
   settings(
     javacOptions++=Seq("-source","1.8","-target","1.8"),
     name := "n3Spark",
-    scalaVersion := "2.11.5",
-    scalaVersion in ThisBuild := "2.11.5",
-    mainClass in Compile := Some("etl.n3CSVRefactor")
+    scalaVersion := "2.10.5",
+    scalaVersion in ThisBuild := "2.10.5",
+    mainClass in Compile := Some("etl.n3CSVBigFileRefactor")
   ).enablePlugins()
 
 assemblyMergeStrategy in assembly := {
@@ -32,8 +32,8 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-sql" % "1.6.3" % "provided",
   // https://mvnrepository.com/artifact/com.opencsv/opencsv
 //  "com.opencsv" % "opencsv" % "4.3.1",
-  "org.scalanlp" %% "breeze-viz" % "0.12",
-  "org.scalanlp" %% "breeze" % "0.12",
+  "org.scalanlp" %% "breeze-viz" % "0.12" % "provided",
+  "org.scalanlp" %% "breeze" % "0.12" % "provided",
   // https://mvnrepository.com/artifact/org.apache.spark/spark-sql
   //"neo4j-contrib" % "neo4j-spark-connector" % "2.1.0-M4"
   "org.apache.hadoop" % "hadoop-client" % "2.7.3" % "provided"

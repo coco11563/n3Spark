@@ -1,12 +1,11 @@
 package etl
 
 import Function.{HDFSHelper, regexFunction}
-import breeze.linalg.DenseVector
 import etl.Obj.Entity
 import org.apache.hadoop.fs.FileSystem
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.language.postfixOps
 import scala.sys.process._
@@ -15,15 +14,18 @@ class n3CSVBigFileRefactor {
 
 }
 object n3CSVBigFileRefactor {
+  val HDFSFileSystem: FileSystem = FileSystem.get(new org.apache.hadoop.conf.Configuration())
   def main(args: Array[String]): Unit = {
     val mainFilepath = args(0)
-    val outFile = args(1)
-    val outName = args(2)
-    val conf = new org.apache.hadoop.conf.Configuration()
-    val HDFSFileSystem = FileSystem.get(conf)
+    val outName = args(1)
+    val outFile = "/data/out/temp/"
+    val tempMergePath = "/data/out/merge/"
+    val mergePath = "/data/out/csv/mergeCSV/"
 
-    val pathList =  HDFSHelper.listChildren(HDFSFileSystem, mainFilepath, new ListBuffer[String])
 
+    val pathList = HDFSHelper.listChildren(HDFSFileSystem, mainFilepath, new ListBuffer[String])
+
+    pathList.foreach(println(_))
     val sparkConf = new SparkConf()
       .setAppName("ProcessOn" + outName)
       .set("spark.driver.maxResultSize", "4g")
@@ -31,36 +33,82 @@ object n3CSVBigFileRefactor {
     val sc = new SparkContext(sparkConf)
     var v = new ListBuffer[(Seq[String], Seq[String])]
     for (i <- pathList.indices)
-      v += process(pathList(i), outFile, outName, sc, i, "/out/merge/")
+      v += process(pathList(i), outFile, outName, sc, i, tempMergePath)
 
-    v.toList.head._1
-
-    mergeFileByShell("/out/merge/", "/out/merge/" + outName)
+    val head_entity = v.toList.head._1
+    val head_relationship = v.toList.head._2
+    sc.parallelize(head_relationship).saveAsTextFile(tempMergePath + "/relationship/head")
+    println(s"save head relationship to $tempMergePath/realtaionship/head")
+    sc.parallelize(head_entity).saveAsTextFile(tempMergePath + "/entity/head")
+    println(s"save head entity to $tempMergePath/entity/head")
+    removeFileByShell(mergePath + outName + "/")
+    val relationshipMerge = HDFSHelper.listChildren(HDFSFileSystem, tempMergePath + "/relationship", new ListBuffer[String])
+    relationshipMerge.foreach(mergeFileByShell(_ , mergePath + outName + "/" + outName + "_relationship" + ".csv"))
+    val entityMerge = HDFSHelper.listChildren(HDFSFileSystem, tempMergePath + "/entity", new ListBuffer[String])
+    entityMerge.foreach(mergeFileByShell(_, mergePath + outName + "/" + outName + "_entity" + ".csv"))
   }
 
-
+  /**
+    *
+    * @param filePath the path you need to remove(-r)
+    * @return the result 0 means be all set
+    */
   def removeFileByShell (filePath : String) : Int = {
+    println(s"removing the file from $filePath")
     s"hadoop fs -rm -r $filePath"!
   }
 
+  /**
+    *
+    * @param filePath input file directory
+    * @param outPath output file directory
+    * @return the result 0 means be all set
+    */
   def mergeFileByShell (filePath : String, outPath : String) : Int = {
-    s"hadoop fs -cat ${filePath}_relationship/*" #| s"hadoop fs -put - ${outPath}_relationship.csv"!
+    println(s"start to merge file from $filePath to $outPath")
+    if(!HDFSHelper.exists(HDFSFileSystem,outPath)) {
+      println(s"start to merge file from $filePath to $outPath : $outPath not existed, so create it")
+      s"hdfs dfs -cat $filePath" #| s"hdfs dfs -put - $outPath" !
+    }
+    else {
+      println(s"start to merge file from $filePath to $outPath : $outPath existed, appending")
+      s"hdfs dfs -cat $filePath" #| s"hdfs dfs -appendToFile - $outPath"!
+    }
+
   }
 
-  def metgeFileByShell (filePath : String, outPath : String, index : Int) : Int = {
-    s"hadoop fs -cat ${filePath}_relationship/*" #| s"hadoop fs -put - ${outPath}_relationship_$index.csv"!
+  /**
+    *
+    * @param filePath input file directory
+    * @param outPath output file name(with index)
+    * @param index this file's index
+    * @return the result 0 means be all set
+    */
+  def mergeFileByShell (filePath : String, outPath : String, index : Int) : Int = {
+    println(s"start to merge file from $filePath/* to ${outPath}_$index.csv")
+    s"hadoop fs -cat $filePath/*" #| s"hadoop fs -put - ${outPath}_$index.csv"!
   }
 
+  /**
+    * outFile + outName + "_relationship" and
+    * outFile + outName + "_entity" will be the output path
+    * to store the output temp data
+    *
+    * after the process about spark
+    * scala will use linux console to merge the file to the outMergePath
+    * @param mainFile the file path you need to precess
+    * @param outFile output file directory
+    * @param outName output file path
+    * @param sc spark main context
+    * @param index the index of the whole batch
+    * @param outMergePath the output merge path
+    * @return the schema of the data (entity & relationship)
+    */
   def process(mainFile : String, outFile : String, outName : String , sc : SparkContext, index : Int, outMergePath : String) : (Seq[String], Seq[String]) = {
-    val deletePastRelationship = removeFileByShell(outFile + outName + "_relationship")
+    val deletePastTemp = removeFileByShell(outFile)
 
-    if (deletePastRelationship == 0) println("done delete past relationship with code " + deletePastRelationship)
-    else println("wrong with delete past relationship with error code " + deletePastRelationship)
-
-    val deletePastEntity = removeFileByShell(outFile + outName + "_entity")
-
-    if (deletePastRelationship == 0) println("done delete past entity with code " + deletePastEntity)
-    else println("wrong with delete past entity with error code " + deletePastEntity)
+    if (deletePastTemp == 0) println("done delete past tmp file with code " + deletePastTemp)
+    else println("wrong with delete past tmp file with error code " + deletePastTemp)
 
     val originalRdd = sc.textFile(mainFile)
     println(originalRdd.first())
@@ -135,9 +183,15 @@ object n3CSVBigFileRefactor {
     //    println(entityClassRdd.first().propSeq.length) // 2
 
     val cacuArrayEntity = entityClassRdd
-      .map(e => DenseVector(e.propSeq.map(_.contains(";")))) //the ';' will only show when the Str is Array
+      .map(e => e.propSeq.map(_.contains(";"))) //the ';' will only show when the Str is Array
       .reduce( // if this one is duplicated key one then the return will be true
-      _ :| _ //using breeze lib to replace the yield operation
+      (a,b) => {
+        val ret = for (i <- a.indices) yield {
+          a(i) || b(i)
+        }
+        ret.toArray
+      }
+       //using breeze lib to replace the yield operation
     )
 
     val entityCollectionRdd = entityClassRdd.map(_.toString)
@@ -164,8 +218,8 @@ object n3CSVBigFileRefactor {
 //    val entitySchemaRdd = sc.parallelize(Array(final_entity_schema)) //only way to make rdd
 //    val entityCollectionRddWithHead = entitySchemaRdd ++ entityCollectionRdd // gear up the csv with it's head
 
-    entityCollectionRdd.saveAsTextFile(outFile  + outName +"_entity") // store the csv file
-
+    entityCollectionRdd.saveAsTextFile(outFile  + outName +"_entity/") // store the csv file
+    println(s"save entity file to ${outFile + outName + "_entity/"}")
     val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE" // make the relationship schema
 
     val relationshipCollectionRdd = relationshipRdd.map(s => { // generate the relationship rdd
@@ -179,14 +233,15 @@ object n3CSVBigFileRefactor {
 //    val relationshipCollectionArrayRdd = relationshipCollectionArray ++ relationshipCollectionRdd // build the relationship csv with head
     relationshipCollectionRdd
       .saveAsTextFile(outFile + outName + "_relationship") // store the relationship rdd file
+    println(s"save relation file to ${outFile + outName + "_relationship"}")
+//done
 
-
-    val mergeEntity = mergeFileByShell(outFile + outName + "_entity/*", outMergePath + "entity_" + index + ".csv")
+    val mergeEntity = mergeFileByShell(outFile + outName + "_entity", outMergePath + "entity/" + outName, index)
 
     if (mergeEntity == 0) println("entity merge done with " + mergeEntity)
     else println("wrong with entity merge with error code " + mergeEntity)
 
-    val mergeRelationship = mergeFileByShell(outFile + outName + "_relationship/*", outMergePath + "relationship_" + index)
+    val mergeRelationship = mergeFileByShell(outFile + outName + "_relationship", outMergePath + "relationship/" + outName, index)
 
     if (mergeRelationship == 0) println("relationship merge done with " + mergeRelationship)
     else println("wrong with relationship merge with error code " + mergeRelationship)
