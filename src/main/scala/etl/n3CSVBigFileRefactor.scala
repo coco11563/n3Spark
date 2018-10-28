@@ -54,14 +54,21 @@ object n3CSVBigFileRefactor {
     }
     val head_entity = v.toList.head._1
     val head_relationship = v.toList.head._2
+
+    var entityMerge = HDFSHelper.listChildren(HDFSFileSystem, tempMergePath + "/entity", new ListBuffer[String])
+    var relationshipMerge = HDFSHelper.listChildren(HDFSFileSystem, tempMergePath + "/relationship", new ListBuffer[String])
+
     sc.parallelize(head_relationship).saveAsTextFile(tempMergePath + "/relationship/head")
     println(s"save head relationship to $tempMergePath/realtaionship/head")
     sc.parallelize(head_entity).saveAsTextFile(tempMergePath + "/entity/head")
     println(s"save head entity to $tempMergePath/entity/head")
+    //delete the stuff in the final merge path
     removeFileByShell(mergePath + outName + "/")
-    val relationshipMerge = HDFSHelper.listChildren(HDFSFileSystem, tempMergePath + "/relationship", new ListBuffer[String])
+    //adding the head to the first of the list
+    entityMerge +:=  tempMergePath + "/entity/head"
+    relationshipMerge +:= tempMergePath + "/relationship/head"
+
     relationshipMerge.foreach(mergeFileByShell(_ , mergePath + outName + "/" + outName + "_relationship" + ".csv"))
-    val entityMerge = HDFSHelper.listChildren(HDFSFileSystem, tempMergePath + "/entity", new ListBuffer[String])
     entityMerge.foreach(mergeFileByShell(_, mergePath + outName + "/" + outName + "_entity" + ".csv"))
   }
 
