@@ -4,6 +4,7 @@ import Function.regexFunction
 import etl.Obj.Entity
 import etl.n3CSVBigFileRefactor.{mergeFileByShell, removeFileByShell}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
 
 class n3CSVDFRefactor {
@@ -70,6 +71,9 @@ object n3CSVDFRefactor {
         else null
       }).filter(_ != null)
     }
+
+
+
     val relationshipRdd = originalRdd
       .filter(s => regexFunction.named_property_regex.matcher(s).find())
 
@@ -82,6 +86,7 @@ object n3CSVDFRefactor {
     }
     )
 
+    relationshipTupleRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
 
     val settleUpEntityRdd = entityTupleRdd.map(s => {
@@ -90,6 +95,7 @@ object n3CSVDFRefactor {
       .groupByKey() //main, gather all the same id entity
       .values //get the same id str
 
+    settleUpEntityRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
     val entitySchema:Seq[String] = settleUpEntityRdd //RDD[Iterable[Tuple]]
       .map(s => s.filter(l => l._4 == propertyFlag)) //RDD[List[PropStr]]
