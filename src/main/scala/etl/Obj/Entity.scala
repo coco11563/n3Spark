@@ -2,6 +2,8 @@ package etl.Obj
 
 import java.io.StringWriter
 
+import org.apache.spark.sql.Row
+
 import scala.collection.mutable.ListBuffer
 
 class Entity( id : String, label : String, prop : Map[String, Array[String]], schema : Seq[String]) extends Serializable
@@ -34,7 +36,9 @@ class Entity( id : String, label : String, prop : Map[String, Array[String]], sc
   override def toString: String = {
     this.propSeq.reduce((a,b) => a + "," + b)
   }
-
+  def toRow : Row = {
+    Row(propSeq)
+  }
 
 }
 object Entity{
