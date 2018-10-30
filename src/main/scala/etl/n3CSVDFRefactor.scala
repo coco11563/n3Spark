@@ -14,15 +14,17 @@ object n3CSVDFRefactor {
   def main(args: Array[String]): Unit = {
     val mainFilepath = args(0)
     val outName = args(1)
-    val countPer = Integer.parseInt(args(2))
+//    val countPer = Integer.parseInt(args(2))
     val outFile = "/data/out/temp/"
     val tempMergePath = "/data/out/merge/"
     val mergePath = "/data/out/csv/mergeCSV/"
 
     val sparkConf = new SparkConf()
       .setAppName("ProcessOn" + outName)
-      .set("spark.driver.maxResultSize", "4g")
+//      .set("spark.driver.maxResultSize", "4g")
+
     val sc = new SparkContext(sparkConf)
+    sc.setCheckpointDir("/tmp/chkpt/")
     process(mainFilepath, outFile, outName, sc, 1, tempMergePath)
   }
 
@@ -50,6 +52,7 @@ object n3CSVDFRefactor {
     if (deletePastTemp == 0) println("done delete past tmp file with code " + deletePastTemp)
     else println("wrong with delete past tmp file with error code " + deletePastTemp)
     var originalRdd : RDD[String] =  sc.textFile(mainFiles)
+//    originalRdd.persist()
     val entityRdd = originalRdd
       .filter(s => regexFunction.named_entity_regex.matcher(s).find() ||
         regexFunction.named_property_regex.matcher(s).find())
@@ -60,34 +63,19 @@ object n3CSVDFRefactor {
       entityRdd.map(s => {
         val me = regexFunction.named_entity_regex.matcher(s)
         val mp = regexFunction.named_property_regex.matcher(s)
-        if (me.find()) {(me.group("id"), me.group("label"), me.group("prefix"),entityFlag)}
+        if (me.find()) {(me.group("id"), me.group("label"), me.group("prefix"), entityFlag)}
         else if (mp.find()) {
           val flag = mp.group("flag")
           val value = mp.group("value")
           val name = mp.group("name")
           val names = if (value == flag) flag else name
-          (mp.group("id"),names,value,propertyFlag)
+          (mp.group("id"),names,value, propertyFlag)
         }
         else null
       }).filter(_ != null)
     }
 
-
-
-    val relationshipRdd = originalRdd
-      .filter(s => regexFunction.named_property_regex.matcher(s).find())
-
-    val relationshipTupleRdd : RDD[(String, String, String, String)] = relationshipRdd.map(s =>
-    { // generate the relationship rdd
-      (regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"id1") ,
-        regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"type") ,
-        regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"id2") ,
-        regexFunction.get(regexFunction.named_relationship_regex.matcher(s),"type"))
-    }
-    )
-
-    relationshipTupleRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
-
+//    println("relationship tuple rdd's count is " + relationshipTupleRdd.count())
 
     val settleUpEntityRdd = entityTupleRdd.map(s => {
       (s._1,s)
@@ -95,8 +83,9 @@ object n3CSVDFRefactor {
       .groupByKey() //main, gather all the same id entity
       .values //get the same id str
 
-    settleUpEntityRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
+//    settleUpEntityRdd.checkpoint()
+//    println("entity tuple rdd's count is " + settleUpEntityRdd.count())
     val entitySchema:Seq[String] = settleUpEntityRdd //RDD[Iterable[Tuple]]
       .map(s => s.filter(l => l._4 == propertyFlag)) //RDD[List[PropStr]]
       .map(s => {
@@ -109,9 +98,7 @@ object n3CSVDFRefactor {
     })
       .reduce(_ ++ _) //Set[Key]
       .toSeq
-
     //    entitySchema.foreach(s => println(s))
-
     val entityClassRdd = settleUpEntityRdd.map(l => { //RDD[Iterable[Tuple]]
       val en = l.filter(s => s._4 == entityFlag).head //Entity Str
 
@@ -133,18 +120,13 @@ object n3CSVDFRefactor {
 
     //    println(entityClassRdd.first().propSeq.length) // 2
 
-
-
     val entityCollectionRdd = entityClassRdd.map(_.toString)
-
     var entitySchemaDemo : Array[String] = Array("ENTITY_ID:ID")
     entitySchemaDemo ++= entitySchema
     entitySchemaDemo :+= "ENTITY_TYPE:LABEL"
 
     //    println(cacuArrayEntity.length)
     //    println(entitySchemaDemo.length)
-
-
 
     val cacuArrayEntity = entityClassRdd
       .map(e => e.propSeq.map(_.contains(";"))) //the ';' will only show when the Str is Array
@@ -156,8 +138,6 @@ object n3CSVDFRefactor {
         ret.toArray
       }
     )
-
-
     //IndexOutBound
     val finalEntitySchemaDemo =
       for (i <- entitySchemaDemo.indices) yield {
@@ -172,19 +152,29 @@ object n3CSVDFRefactor {
     println(final_entity_schema)
 
     val entitySchemaRdd = sc.parallelize(Array(final_entity_schema)) //only way to make rdd
-    val entityCollectionRddWithHead = entitySchemaRdd ++ entityCollectionRdd // gear up the csv with it's head
+    val be = sc.broadcast(entitySchemaRdd)
+    val entityCollectionRddWithHead = be.value ++ entityCollectionRdd // gear up the csv with it's head
 
     entityCollectionRddWithHead.saveAsTextFile(outFile  + outName +"_entity/") // store the csv file
     println(s"save entity file to ${outFile + outName + "_entity/"}")
 
-    val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE" // make the relationship schema
 
-    val relationshipCollectionRdd = relationshipTupleRdd.map(s => { // generate the relationship rdd
-      s._1 + "," + s._2 + "," + s._3 + "," + s._4
-    })
+
+    val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE" // make the relationship schema
+    val relationshipRdd = originalRdd
+      .filter(s => regexFunction.named_property_regex.matcher(s).find())
+
+    val relationshipCollectionRdd : RDD[String] = relationshipRdd.map(s =>
+    { // generate the relationship rdd
+      val me = regexFunction.named_relationship_regex.matcher(s)
+      me.find()
+      me.group("id1") +"," + me.group("type") +"," +  me.group("id2") + "," + me.group("type")
+    }
+    )
 
     val finalRelationshipSchemaArray = sc.parallelize(Array(finalRelationshipSchema)) //only way to make rdd
-    val relationshipCollectionRddWithHead = finalRelationshipSchemaArray ++ relationshipCollectionRdd // build the relationship csv with head
+    val br = sc.broadcast(finalRelationshipSchemaArray)
+    val relationshipCollectionRddWithHead = br.value ++ relationshipCollectionRdd // build the relationship csv with head
     relationshipCollectionRddWithHead
       .saveAsTextFile(outFile + outName + "_relationship") // store the relationship rdd file
 
