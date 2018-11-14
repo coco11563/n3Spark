@@ -32,6 +32,7 @@ object n3CSVBigFileRefactor {
       .listChildren(HDFSFileSystem, mainFilepath, new ListBuffer[String])
       .toList
 
+
 //    pathList.foreach(println(_))
 
     val sc = new SparkContext(sparkConf)
