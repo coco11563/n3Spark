@@ -81,7 +81,10 @@ object n3CSVBigFileRefactor {
     println(s"removing the file from $filePath")
     s"hadoop fs -rm -r $filePath"!
   }
-
+  def moveFileByShell (sfilePath: String, tfilePath : String) : Int = {
+    println(s"moving the file from $sfilePath to $tfilePath")
+    s"hadoop fs -mv $sfilePath $tfilePath"!
+  }
   /**
     *
     * @param filePath input file directory

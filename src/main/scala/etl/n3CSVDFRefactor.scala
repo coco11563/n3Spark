@@ -2,10 +2,10 @@ package etl
 
 import Function.regexFunction
 import etl.Obj.Entity
-import etl.n3CSVBigFileRefactor.{mergeFileByShell, removeFileByShell}
+import etl.n3CSVBigFileRefactor.removeFileByShell
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
+import scala.sys.process._
 
 class n3CSVDFRefactor {
 
@@ -14,14 +14,16 @@ object n3CSVDFRefactor {
   def main(args: Array[String]): Unit = {
     val mainFilepath = args(0)
     val outName = args(1)
-//    val countPer = Integer.parseInt(args(2))
+    //    val countPer = Integer.parseInt(args(2))
     val outFile = "/data/out/temp/"
     val tempMergePath = "/data/out/merge/"
     val mergePath = "/data/out/csv/mergeCSV/"
 
     val sparkConf = new SparkConf()
       .setAppName("ProcessOn" + outName)
-//      .set("spark.driver.maxResultSize", "4g")
+    //      .set("spark.driver.maxResultSize", "4g")
+      .set("spark.yarn.driver.memoryOverhead","4096")
+      .set("spark.yarn.executor.memoryOverhead","4096")
 
     val sc = new SparkContext(sparkConf)
     sc.setCheckpointDir("/tmp/chkpt/")
@@ -52,7 +54,7 @@ object n3CSVDFRefactor {
     if (deletePastTemp == 0) println("done delete past tmp file with code " + deletePastTemp)
     else println("wrong with delete past tmp file with error code " + deletePastTemp)
     var originalRdd : RDD[String] =  sc.textFile(mainFiles)
-//    originalRdd.persist()
+    //    originalRdd.persist()
     val entityRdd = originalRdd
       .filter(s => regexFunction.named_entity_regex.matcher(s).find() ||
         regexFunction.named_property_regex.matcher(s).find())
@@ -63,19 +65,23 @@ object n3CSVDFRefactor {
       entityRdd.map(s => {
         val me = regexFunction.named_entity_regex.matcher(s)
         val mp = regexFunction.named_property_regex.matcher(s)
-        if (me.find()) {(me.group("id"), me.group("label"), me.group("prefix"), entityFlag)}
+        if (me.find()) {
+          val id = me.group("id")
+          val label = me.group("label")
+          val prefix = me.group("prefix")
+          (id, label, prefix, entityFlag)}
         else if (mp.find()) {
           val flag = mp.group("flag")
           val value = mp.group("value")
           val name = mp.group("name")
           val names = if (value == flag) flag else name
-          (mp.group("id"),names,value, propertyFlag)
+          ( mp.group("id"),names,value, propertyFlag)
         }
         else null
       }).filter(_ != null)
     }
 
-//    println("relationship tuple rdd's count is " + relationshipTupleRdd.count())
+    //    println("relationship tuple rdd's count is " + relationshipTupleRdd.count())
 
     val settleUpEntityRdd = entityTupleRdd.map(s => {
       (s._1,s)
@@ -84,8 +90,8 @@ object n3CSVDFRefactor {
       .values //get the same id str
 
 
-//    settleUpEntityRdd.checkpoint()
-//    println("entity tuple rdd's count is " + settleUpEntityRdd.count())
+    //    settleUpEntityRdd.checkpoint()
+    //    println("entity tuple rdd's count is " + settleUpEntityRdd.count())
     val entitySchema:Seq[String] = settleUpEntityRdd //RDD[Iterable[Tuple]]
       .map(s => s.filter(l => l._4 == propertyFlag)) //RDD[List[PropStr]]
       .map(s => {
@@ -105,6 +111,7 @@ object n3CSVDFRefactor {
       val label = en._2 //label
       //id
       val id = en._1
+      val prefix = en._3
       val prop = l
         .filter(s => s._4 == propertyFlag)//List[PropStr]
         .map(s => {//may cause the duplicated key/value overwrite
@@ -115,7 +122,7 @@ object n3CSVDFRefactor {
         .map(f => (f._1, f._2.map(_._2).toArray))
         .toArray
         .toMap
-      new Entity(id, label, prop, entitySchema) // get the new entity
+      new Entity(prefix + id, label, prop, entitySchema) // get the new entity
     })
 
     //    println(entityClassRdd.first().propSeq.length) // 2
@@ -162,13 +169,13 @@ object n3CSVDFRefactor {
 
     val finalRelationshipSchema = "ENTITY_ID:START_ID,role,ENTITY_ID:END_ID,RELATION_TYPE:TYPE" // make the relationship schema
     val relationshipRdd = originalRdd
-      .filter(s => regexFunction.named_property_regex.matcher(s).find())
+      .filter(s => regexFunction.named_relationship_regex.matcher(s).find())
 
     val relationshipCollectionRdd : RDD[String] = relationshipRdd.map(s =>
     { // generate the relationship rdd
       val me = regexFunction.named_relationship_regex.matcher(s)
       me.find()
-      me.group("id1") +"," + me.group("type") +"," +  me.group("id2") + "," + me.group("type")
+      me.group("prefix1") + me.group("id1") +"," + me.group("type") +"," + me.group("prefix2") + me.group("id2") + "," + me.group("type")
     }
     )
 
@@ -180,19 +187,24 @@ object n3CSVDFRefactor {
 
     println(s"save relation file to ${outFile + outName + "_relationship"}")
     //done
-    removeFileByShell(outMergePath + "entity/*")
+//    removeFileByShell(outMergePath + "entity/*")
+//
+//    removeFileByShell(outMergePath + "relationship/*")
 
-    removeFileByShell(outMergePath + "relationship/*")
-
-    val mergeEntity = mergeFileByShell(outFile + outName + "_entity", outMergePath + "entity/" + outName, index)
+    val mergeEntity = mergeFileByShell(outFile + outName + "_entity", outMergePath + outName + "_entity")
 
     if (mergeEntity == 0) println("entity merge done with " + mergeEntity)
     else println("wrong with entity merge with error code " + mergeEntity)
 
-    val mergeRelationship = mergeFileByShell(outFile + outName + "_relationship", outMergePath + "relationship/" + outName,index)
+    val mergeRelationship = mergeFileByShell(outFile + outName + "_relationship", outMergePath + outName + "_relationship")
 
     if (mergeRelationship == 0) println("relationship merge done with " + mergeRelationship)
     else println("wrong with relationship merge with error code " + mergeRelationship)
+  }
+
+  def mergeFileByShell (filePath : String, outPath : String) : Int = {
+    println(s"start to merge file from $filePath/* to $outPath.csv")
+    s"hadoop fs -cat $filePath/*" #| s"hadoop fs -put - $outPath.csv"!
   }
 }
 

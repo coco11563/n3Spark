@@ -32,11 +32,15 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-sql" % "1.6.3" % "provided",
   // https://mvnrepository.com/artifact/com.opencsv/opencsv
 //  "com.opencsv" % "opencsv" % "4.3.1",
-  "org.scalanlp" %% "breeze-viz" % "0.12" % "provided",
-  "org.scalanlp" %% "breeze" % "0.12" % "provided",
+//  "org.scalanlp" %% "breeze-viz" % "0.12" % "provided",
+//  "org.scalanlp" %% "breeze" % "0.12" % "provided",
   // https://mvnrepository.com/artifact/org.apache.spark/spark-sql
   //"neo4j-contrib" % "neo4j-spark-connector" % "2.1.0-M4"
-  "org.apache.hadoop" % "hadoop-client" % "2.7.3" % "provided"
+  "org.apache.hadoop" % "hadoop-client" % "2.7.3" % "provided",
+    // https://mvnrepository.com/artifact/org.eclipse.rdf4j/rdf4j-rio-api
+  "org.eclipse.rdf4j" % "rdf4j-rio-api" % "2.4.1",
+  "org.eclipse.rdf4j" % "rdf4j-rio-ntriples" % "2.4.1"
+
 )
 
 //Compile/mainClass := Some("count_the_num")
