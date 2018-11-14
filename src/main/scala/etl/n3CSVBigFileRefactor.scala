@@ -33,6 +33,7 @@ object n3CSVBigFileRefactor {
       .toList
 
 
+
 //    pathList.foreach(println(_))
 
     val sc = new SparkContext(sparkConf)
